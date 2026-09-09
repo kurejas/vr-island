@@ -1,0 +1,1708 @@
+@charset "UTF-8";
+/* ══════════════════════════════════════════════════════════════════════════
+   AR · VR — Fox Creator
+   Figma: cnwRWkbi5NIvaC71dIHWdu · node 2856-2986
+
+   Breakpoints (from the Figma frames):
+     Desktop   1440px+          frame 1728px   [2856:3882]
+     Tablet     834px – 1439px  frame 1194px   [2856:4092]
+     Mobile      ≤ 833px        frame  402px   [2856:3645]
+
+   No scaling: type, spacers and gaps are fixed px per breakpoint.
+   Containers flex (page padding + row gap are the % the Figma frames use),
+   contents never do.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. Real fonts ─────────────────────────────────────────────────────────
+   Helvetica Now Display, self-hosted, converted from the licensed desktop
+   .ttf in ~/Library/Fonts. font-display:block so the first paint is never
+   the fallback — a metric-mismatched fallback would visibly break both the
+   cap-height trim and the side-bearing trim below.
+   ------------------------------------------------------------------------ */
+
+@font-face{
+    font-family:"Helvetica Now Display";
+    src:url("../fonts/HelveticaNowDisplay-Bold.woff2") format("woff2");
+    font-weight:700;
+    font-style:normal;
+    font-display:block;
+}
+@font-face{
+    font-family:"Helvetica Now Display";
+    src:url("../fonts/HelveticaNowDisplay-ExtraBold.woff2") format("woff2");
+    font-weight:800;
+    font-style:normal;
+    font-display:block;
+}
+@font-face{
+    font-family:"Helvetica Now Display";
+    src:url("../fonts/HelveticaNowDisplay-Medium.woff2") format("woff2");
+    font-weight:500;
+    font-style:normal;
+    font-display:block;
+}
+@font-face{
+    font-family:"Helvetica Now Display";
+    src:url("../fonts/HelveticaNowDisplay-Regular.woff2") format("woff2");
+    font-weight:400;
+    font-style:normal;
+    font-display:block;
+}
+
+
+/* ─── 2. Font metrics ───────────────────────────────────────────────────────
+   Read straight out of the font binary (unitsPerEm 1000):
+       sTypoAscender   875     ← USE_TYPO_METRICS is set, so browsers use these
+       sTypoDescender -125
+       sCapHeight      712
+
+   Cap-height-to-baseline therefore trims, per side:
+       top    = (line-height − font-size)/2 + (875−712)/1000 em
+       bottom = (line-height − font-size)/2 + 125/1000 em
+
+   Cross-checked against every text block Figma reports:
+       75/76 ×4 → 281.4 (Figma 281)   75/76 ×5 → 357.4 (Figma 357)
+       40/41 ×9 → 356.5 (Figma 356)   17/23 ×3 →  58.1 (Figma 58)
+       14/19 ×4 →  67.0 (Figma 67)
+   ------------------------------------------------------------------------ */
+
+:root{
+    --trim-cap:0.163em;   /* ascender − cap height */
+    --trim-base:0.125em;  /* descender */
+
+    --black:#000;
+    --grey:rgba(0,0,0,.55);
+    --link-hover:#3ABAD1;
+    --paper:#fff;
+
+    --font:"Helvetica Now Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+    --emoji:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+}
+
+
+/* ─── 3. Reset ──────────────────────────────────────────────────────────── */
+
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{
+    -webkit-text-size-adjust:100%;
+    scroll-behavior:smooth;      /* "Skip to demos" glides to the first clip */
+}
+
+@media (prefers-reduced-motion:reduce){
+    html{ scroll-behavior:auto; }
+}
+
+body{
+    margin:0;
+    background:var(--paper);
+    color:var(--black);
+    font-family:var(--font);
+    font-weight:700;
+}
+
+/* ─── 3b. Consistent text rendering ─────────────────────────────────────────
+   Rasterisation itself is the OS's (CoreText vs DirectWrite vs FreeType), and
+   no CSS property overrides that — so identical pixels across platforms is not
+   on offer. What IS avoidable is every difference that comes from the browser
+   guessing, and these four remove all of it:
+
+   font-synthesis:none      The big one for "boldness". If a weight or italic
+                            is ever missing, browsers fake it by smearing or
+                            slanting the glyphs — and each engine fakes it by a
+                            different amount. This forbids that outright: only
+                            the real .woff2 faces are ever drawn.
+   font-kerning + ligatures  Pins the OpenType features on, so advance widths
+                            (and therefore line breaks) are identical
+                            everywhere instead of engine-dependent.
+   font-smoothing           macOS only: switches Chrome/Safari off subpixel
+                            (RGB) antialiasing onto greyscale, so the three Mac
+                            browsers agree with each other — and with Figma,
+                            which also renders greyscale. No effect elsewhere,
+                            which is fine: Windows is already greyscale here.
+
+   Deliberately NOT used: text-rendering:optimizeLegibility — it silently
+   changes which ligatures and kerning pairs apply per engine, i.e. the exact
+   inconsistency we are trying to remove.
+   ------------------------------------------------------------------------ */
+
+html,
+body,
+p, a, span, h1, h2, h3, h4, h5, h6, li, td, th, label, button, input, textarea{
+    font-synthesis:none;
+    -webkit-font-synthesis:none;   /* Safari < 16.4 only knows the prefix */
+    font-kerning:normal;
+    font-variant-ligatures:common-ligatures;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+}
+
+img{ display:block; max-width:100%; }
+
+p{ margin:0; }
+
+figure{ margin:0; }
+
+
+/* ─── 4. Cap height → baseline ──────────────────────────────────────────────
+   `.trim` needs --lh set alongside a px font-size on the same element.
+
+   Fallback (Capsize method): zero-height table boxes pull the line box in by
+   exactly the dead space above the cap and below the baseline. `display:table`
+   stops these margins collapsing into the text.
+
+   Where the browser has CSS Inline Layout 3 (Chrome/Edge 133+, Safari 18.2+)
+   the pseudo-elements are dropped and `text-box` does it natively — same
+   result, but it survives font-size changes and re-wrapping on its own.
+   ------------------------------------------------------------------------ */
+
+.trim{ line-height:var(--lh); }
+
+.trim::before,
+.trim::after{
+    content:"";
+    display:table;
+}
+.trim::before{ margin-bottom:calc((1em - var(--lh)) / 2 - var(--trim-cap)); }
+.trim::after { margin-top:   calc((1em - var(--lh)) / 2 - var(--trim-base)); }
+
+@supports (text-box-trim:trim-both){
+    .trim::before,
+    .trim::after{ content:none; }
+
+    .trim{
+        text-box-trim:trim-both;
+        text-box-edge:cap alphabetic;
+    }
+}
+
+
+/* ─── 5. Horizontal side-bearing trim ───────────────────────────────────────
+   The horizontal twin of the problem above: every glyph carries blank side
+   bearings inside its advance width, so a text block sits optically indented
+   from a box edge that an image below it meets exactly.
+
+   Same fix, same direction — pull the dead space off with negative margins.
+   Values are measured off the font, per the glyph that actually opens the
+   block, then resolved to fixed px per breakpoint (see each block below):
+
+       N / I   lsb 58/1000      V   lsb  6/1000
+       .       rsb 38/1000      lowercase mean rsb ≈ 32/1000
+   (all Bold — every text object in this section is Helvetica Now Display Bold)
+
+   Set --sbl / --sbr on the element. Both are already negative.
+
+   ── Why the right side mirrors the left instead of trimming ──
+   Trimming both bearings widens the text box by |--sbl| + |--sbr|, and that
+   widens the MEASURE — which re-wraps the copy. On mobile it costs a whole
+   line: the lead goes from Figma's 9 lines (356px) to 8 (315px).
+
+   Ink flush left + ink flush right + Figma's exact line breaks cannot all
+   hold at once, because Figma broke these lines against an untrimmed box.
+   The default below keeps the two that are visible: the block shifts left by
+   the opening glyph's bearing (ink meets the edge, aligned with the image
+   under it) and gives the same amount back on the right, so the measure —
+   and therefore every line break — is byte-identical to Figma. The right
+   bearing is invisible anyway; this copy is ragged-right.
+
+   Add class `sb--both` to any block to trim the right bearing too, at the
+   cost of re-wrapping. Worth it if a block ever sits flush against something
+   on its right, or gets justified.
+   ------------------------------------------------------------------------ */
+
+.sb{
+    margin-left:var(--sbl,0px);
+    margin-right:calc(0px - var(--sbl,0px));
+}
+
+.sb--both{ margin-right:var(--sbr,0px); }
+
+
+/* ─── 6. Layout ─────────────────────────────────────────────────────────────
+   `.gutter` carries the page margin. It is a no-op on desktop/tablet, where
+   the section itself is padded — it only takes over on mobile, where Figma
+   moves the margin onto the individual blocks so the render can go
+   full-bleed while everything else stays inset.
+   ------------------------------------------------------------------------ */
+
+.section{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    padding:0 var(--pad);
+    background:var(--paper);
+    /* Two blocks deliberately overrun the page — the master-plan sketchbook
+       (1318px in a 743px column) and, on mobile, the hero — so the horizontal
+       bleed has to be clipped.
+       It must be `overflow-x: clip`, NOT `hidden`: `hidden` on one axis forces
+       the other to `auto`, which was cropping the descenders off every text
+       object sitting near a section edge (the cap-height trim puts the box at
+       the baseline, so g/j/p/y hang below it by design). `clip` is the one
+       value that may pair with a visible cross axis. */
+    overflow-x:clip;
+}
+
+.gutter{ padding:0; }
+
+.spacer{
+    flex:none;
+    height:var(--spacer);
+}
+
+/* Figma uses three spacer steps; --spacer is the common one */
+.spacer--md{ height:var(--spacer-md); }
+.spacer--xl{ height:var(--spacer-xl); }
+
+/* [2831:10324] the haiku's own step — matches --spacer-md except on mobile,
+   where Figma tightens it to 28 */
+.spacer--haiku{ height:var(--spacer-md); }
+
+/* Two page-level gaps that exist only on the narrower frames: desktop runs
+   hero → intro → skip with no space between them, tablet adds one after the
+   hero, and mobile adds one after the hero AND after the intro. */
+.spacer--hero-intro,
+.spacer--intro-skip{ height:0; }
+
+.row{
+    display:flex;
+    align-items:flex-start;
+    gap:var(--row-gap);
+}
+
+.col{
+    flex:1 0 0;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+}
+
+.col--captioned{ gap:var(--col-gap); }
+
+/* a full-width block that owns its own caption — Side view / Top view.
+   Not a .col: it is a child of the section's own column flex, so it must
+   size to its content rather than grow. */
+.stack{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:var(--col-gap);
+}
+
+/* Frame 31 [2832:287] is ABSOLUTE in Figma — out of flow, contributing no
+   height, so it is simply not built. */
+
+/* the black rule between sections [2831:8618] — a 1555×2 rect at x=86.4, i.e.
+   exactly the content width. It must use --margin, not --pad: on mobile --pad
+   is 0 (the page margin moves onto .gutter) and the rule ran edge to edge. */
+.rule{ padding:0 var(--margin); }
+
+.rule span{
+    display:block;
+    height:var(--rule-h);
+    background:var(--black);
+}
+
+/* [2832:289] the display type and its column sit on one wrapping line.
+
+   They only fit side by side above ~1592px. Below that the line wraps, and
+   .row's `gap` — a PERCENTAGE — becomes a row-gap resolving against the
+   container's block size, which is auto, so it silently computes to 0 and the
+   copy lands on the heading's baseline (the cap trim puts the box there, so
+   "Modeling"'s descender sits right on top of it).
+
+   Fixed with a LENGTH row-gap, which is the one form that survives here: it
+   applies only BETWEEN wrapped lines, so it cannot misfire when the two sit
+   side by side, and a length is immune to the auto-height collapse. The calc
+   reproduces Figma's 4%-of-frame gutter against the capped page width —
+   69.12 at 1728, 57.6 at 1440, 78.67 once the page stops growing. */
+.row--wrap{
+    flex-wrap:wrap;
+    row-gap:calc(4 * min(1vw, 19.66667px));
+}
+
+.col--minw{ min-width:500px; }
+.col--gap40{ gap:40px; }
+
+/* [2832:309] this column's artwork overruns to the LEFT, not the right */
+.col--bleed-left{ align-items:flex-end; }
+.col--bleed-left .gutter{ display:flex; justify-content:flex-end; }
+
+/* [2832:320] a row whose cells align on their bottom edge */
+.row--bottom{ align-items:flex-end; }
+
+/* [2832:311] Figma pins this column to 500px and simply lets the stack of
+   blocks inside it overrun — the row's height comes from the bleeding
+   sketchbook in the other column, not from this content. */
+.col--h500{
+    height:500px;
+    overflow:visible;
+}
+
+/* [2832:301] the video row's right column keeps a fixed height at both wide
+   breakpoints — the row's height comes from the captioned column on the left */
+.row--video > .col:last-child{ height:424.62px; }
+
+.stack--10{ gap:10px; }
+
+/* [2831:8339] caption sits over the foot of the image */
+.col--overlay{ position:relative; }
+
+.caption.caption--overlay{
+    /* absolute, so it is out of flow and .stack--10's 10px gap never applies
+       to it — the block's height is the image alone, as in Figma */
+    position:absolute;
+    left:0.06%;
+    right:74.91%;      /* Figma pins both edges — width lands at 25.03% */
+    bottom:0.42px;
+    max-width:none;    /* .caption's 650px would otherwise win on source order */
+}
+
+/* [2832:321] Col L is itself a row — caption beside the tall texture strip.
+   Its 69.12px gap has to be re-based again: a percentage gap resolves against
+   THIS column's width (743.04), not the parent row's (1555.2). */
+.col--pair{
+    flex-direction:row;
+    align-items:flex-end;
+    gap:var(--pair-gap);
+}
+
+/* both halves share the column evenly, as in Figma */
+.col--pair > *{
+    flex:1 0 0;
+    min-width:0;
+}
+
+/* [2832:345] Figma splits this caption into two paragraphs 7px apart */
+.caption--split p{ margin:0; }
+.caption--split p:first-child{ margin-bottom:7px; }
+
+/* ── header [2832:386 / 2832:387] ──
+   Both items are ABSOLUTE in Figma, pinned to the page margins at y30.3.
+   The name trims its left bearing; "Mail" trims its right, since that is the
+   edge it aligns to.
+
+   It rides fixed to the top and fades out on the way down, back in on the way
+   up — so it is out of the way while reading but one small scroll away. */
+
+.page{ position:relative; }
+
+.topbar{
+    position:fixed;
+    top:30.3px;
+    left:0;
+    right:0;
+    z-index:20;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding:0 var(--margin);
+    pointer-events:none;
+    opacity:1;
+    /* matched to foxcreator.com's own fixed header element (.nav-r-side),
+       which reads `all 0.275s ease-in-out` on the live site */
+    transition:opacity 275ms ease-in-out;
+}
+
+.topbar[data-hidden]{ opacity:0; }
+
+/* nothing invisible stays clickable */
+.topbar[data-hidden] .topbar__item{ pointer-events:none; }
+
+/* At the top of the page "Darius Krisiunas" would scroll to where we already
+   are, so it stops being a link there — no hover colour, no pointer, no
+   click. pointer-events covers all three. */
+.topbar[data-attop] .topbar__home{ pointer-events:none; }
+
+@media (prefers-reduced-motion:reduce){
+    .topbar{ transition:none; }
+}
+
+.topbar__item{
+    pointer-events:auto;
+    font-weight:800;
+    font-size:var(--topbar-fs);
+    --lh:var(--topbar-lh);
+    color:var(--black);
+    text-decoration:none;
+    white-space:nowrap;
+    --sbl:var(--topbar-sbl);
+}
+
+/* [2832:387] Mail is the same 55% grey as the captions, not black */
+.topbar__mail{ color:var(--grey); }
+
+/* the name scrolls back to the top */
+.topbar__home{ transition:color 150ms ease; }
+.topbar__home:hover{ color:var(--link-hover); }
+
+.topbar__mail{
+    /* aligns to the right margin, so the trim flips to that side */
+    --sbl:0px;
+    margin-right:var(--topbar-sbr);
+    transition:color 150ms ease;
+}
+
+.topbar__mail:hover{ color:var(--link-hover); }
+
+/* ── page width cap ──
+   The lead is capped at 1770px, so everything else has to stop there too or
+   the images keep growing past the text. Capping the page rather than each
+   block keeps the 5% margins proportional inside it: content = 0.9 x page, so
+   1770 / 0.9 = 1966.667px is the page width at which content hits 1770.
+   Below that nothing changes; above it the page centres in the viewport.
+   The fixed header is capped to match, or it would drift wider than the copy
+   it sits over. */
+
+.page,
+.topbar{
+    max-width:var(--page-max);
+    margin-inline:auto;
+}
+
+/* ── the bleed above the cap ──
+   Both sketchbooks overhang their column by a FIXED amount (--mw 1318.3px in
+   an 845.7px column), so below the cap they run off the SCREEN — that is the
+   design. Above it the page stops growing while the overhang does not, so
+   .section's clip cut them 374.3px short at the PAGE edge and left white
+   beyond it. Hand the clip to the viewport there instead: the books bleed off
+   the screen exactly as they do at 1728, and once the viewport is wide enough
+   to hold the whole overhang (~2715px) they simply come fully into view.
+   The root clip is what stops the page scrolling sideways once .section lets
+   go; `clip` (not `hidden`) for the same reason it is used on .section. */
+
+html{
+    /* Fallback first: Safari < 16 has no `clip`, drops the declaration, and
+       the bleeding sketchbooks would then hand the viewport a horizontal
+       scrollbar. `hidden` is safe HERE in a way it is not on .section — root
+       overflow propagates to the viewport, whose other axis already scrolls,
+       so there is no cross-axis `auto` to clip descenders with. */
+    overflow-x:hidden;
+    overflow-x:clip;
+}
+
+@media (min-width:1966.67px){
+    .section{ overflow-x:visible; }
+}
+
+/* ── section 0 · Hero [2832:211] ──
+   A free composition: three absolutely-positioned layers over a section whose
+   height is fixed per breakpoint. The insets are the percentages Figma uses,
+   so the whole thing re-proportions with the viewport width. */
+
+.hero-canvas{
+    position:relative;
+    height:var(--hero-h);
+    /* clip only sideways — `hidden` on one axis forces the other to `auto`,
+       which was cutting the 3D title off where it runs past the bottom.
+       Figma's own frame has clipsContent = false on desktop and tablet. */
+    overflow-x:clip;
+    background:var(--paper);
+}
+
+.hero-layer{
+    position:absolute;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+}
+
+.hero-art{ width:100%; position:relative; }
+
+.hero-art img{
+    display:block;
+    width:100%;
+    height:auto;
+}
+
+/* [2831:8976] */
+.hero-layer--bottom{
+    left:6.72%;
+    right:13.85%;
+    top:calc(50% + 18.43px);
+    transform:translateY(-50%);
+}
+.hero-art--bottom{ aspect-ratio:1372.5589599609375 / 925.6076049804688; }
+
+/* [2831:8811] */
+.hero-layer--top{
+    left:40.54%;
+    right:1.77%;
+    top:calc(50% + 50.67px);
+    transform:translateY(-50%);
+}
+.hero-art--top{ aspect-ratio:997 / 900.3458251953125; }
+
+/* [2832:213]
+   Figma pins this at left 4.4% / right -20.14%, i.e. the box deliberately
+   runs off the right edge. That is fine at the 1728 design width, where the
+   ink stops ~289px short of the frame anyway — but as the viewport narrows the
+   right margin shrinks past the left and the title starts to crowd the edge.
+   Mirroring the left inset instead keeps 1728 identical (the ink still fits on
+   two lines) and lets the title take a third line once the measure genuinely
+   demands it. It is absolutely positioned, so the line count never moves the
+   artwork around it. */
+.display--hero{
+    position:absolute;
+    left:4.4%;
+    right:4.4%;
+    top:214px;
+    margin:0;
+}
+
+/* Qualified with .display so it wins over the `.display { white-space:pre }`
+   further down the sheet — the hard break belongs to the 3D Modeling display,
+   not to this one, which has to be free to re-wrap as the measure narrows. */
+.display.display--hero{ white-space:normal; }
+
+/* [2831:8672] The VR scribble is pinned % + px from the left: the SAME
+   percentage the title uses, plus a fixed offset. The title's left edge is a
+   percentage of the frame and its type is a fixed size, so "Private" always
+   ends the same number of pixels past that edge — which is why % + px keeps
+   the mark parked just right of the "e" at every width, where a bare
+   percentage drifted and a bare pixel value stayed put while the title moved.
+   The px half is measured at each design width: 700.5 - 4.4%x1728 = 624.468. */
+.hero-vr{
+    position:absolute;
+    left:calc(4.4% + 624.468px);
+    top:101px;
+    width:111px;
+    height:161px;
+}
+.hero-vr img{ width:100%; height:100%; object-fit:cover; }
+
+/* ── section 1 · Intro [2832:215] ── */
+.row--intro{ align-items:flex-end; }
+
+.col--avatar{
+    flex-direction:row;
+    align-items:flex-end;
+    justify-content:flex-end;
+}
+
+.col--avatar .caption{ flex:1 0 0; min-width:0; }
+
+.avatar{
+    flex:none;
+    width:var(--avatar);
+    height:var(--avatar);
+    border-radius:100px;
+    overflow:hidden;
+    position:relative;
+}
+.avatar img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+/* ── section 2 · Skip [2832:222] ── */
+.section--skip{ padding-top:var(--skip-pt); }
+
+.pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:var(--pill-py) 29px;
+    border-radius:12px;
+    background:#BFE8FF;
+    color:var(--black);
+    text-decoration:none;
+    white-space:nowrap;
+    transition:background-color 150ms ease;
+}
+
+.pill:hover{ background:#a5dcfb; }
+
+.pill__label{
+    display:block;
+    font-weight:700;
+    font-size:var(--pill-fs);
+    --lh:var(--pill-lh);
+}
+
+/* ── section 3 · Sound ──
+   This section pads its own blocks instead of the whole section, because the
+   two videos run full-bleed between them. */
+.section--flush{ padding:0; }
+
+.wrap{ padding:0 var(--margin); }
+.wrap--pt40{ padding-top:40px; }
+
+/* [2832:359] the whole plate is the control — click anywhere to unmute */
+.videoplate{
+    display:block;
+    position:relative;
+    width:100%;
+    padding:0;
+    border:0;
+    background:none;
+    font:inherit;
+    color:inherit;
+    cursor:pointer;
+    -webkit-appearance:none;
+    appearance:none;
+}
+
+.media--bigvideo{
+    display:block;
+    aspect-ratio:1728 / 951;
+}
+
+/* Two nested crops, exactly as Figma builds it:
+
+   .vidbox   is the video NODE — 1728x980, nudged up (--vy: -10 / -15px) so the
+             951-tall plate trims a little off both ends.
+   video     is the fill inside it. scaleMode is CROP with a videoTransform,
+             not a plain "cover": only the band from 9.72% to 97.54% of the
+             source is shown, and that is what cuts the grey editor UI off the
+             top and bottom of the screen recording. Reproduced by over-sizing
+             the element to 1/sy (--vh) and pulling it up by ty/sy (--vt).
+             The band's aspect matches the box, so `fill` does not distort. */
+
+.vidbox{
+    position:absolute;
+    left:0;
+    right:0;
+    top:var(--vy);
+    aspect-ratio:1728 / 980;
+    overflow:hidden;
+}
+
+.vidbox video{
+    position:absolute;
+    left:0;
+    width:100%;
+    height:var(--vh);
+    top:var(--vt);
+    object-fit:fill;
+}
+
+/* [I2832:359;870:1378] "Play With Sound" — black 21% over #77DAEC 42%,
+   sitting on a 12.5px backdrop blur */
+.soundbtn{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:19.5px 29px;
+    border-radius:12px;
+    white-space:nowrap;
+    color:#fff;
+    opacity:1;
+    transition:opacity 150ms ease;
+    isolation:isolate;
+}
+
+/* The blur lives on its own layer BEHIND the label, never on the element that
+   paints the text. Safari re-rasterises text that sits inside a
+   backdrop-filter's stacking context and drops the greyscale smoothing, which
+   is what made these two labels look heavier than everything else. */
+.soundbtn__bg{
+    position:absolute;
+    inset:0;
+    z-index:0;
+    border-radius:12px;
+    background-color:rgba(119,218,236,.42);
+    -webkit-backdrop-filter:blur(12.5px);
+    backdrop-filter:blur(12.5px);
+}
+
+/* The black layer is its own element so it can actually animate — a
+   background made of gradients cannot be transitioned. Figma keeps both
+   shades on the button and toggles which is visible: 21% at rest, 42% on
+   hover. The label colour does not change. */
+.soundbtn__bg::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius:12px;
+    background:#000;
+    opacity:.21;
+    transition:opacity 150ms ease;
+}
+
+.videoplate:hover .soundbtn__bg::after{ opacity:.42; }
+
+/* the label is cap-trimmed like every other text object — that is why Figma
+   reports the button as 53px tall (19.5 + 14.24 + 19.5) and not 66 */
+.soundbtn__label{
+    position:relative;
+    z-index:1;
+    display:block;
+    font-weight:700;
+    font-size:20px;
+    --lh:27px;
+}
+
+/* the button steps out of the way while a clip is actually playing, and
+   comes back when it is paused or has finished */
+.videoplate[data-playing] .soundbtn{ opacity:0; pointer-events:none; }
+
+/* [2831:9040] an empty half that just holds the measure to two columns.
+   The paragraph beside it has to flex, or its 1150px max-width wins and the
+   text spills past two columns. */
+.col--flat{ height:0; }
+
+.row > .lead{
+    flex:1 0 0;
+    min-width:0;
+}
+
+/* ── sections 4–5 · Haiku and Contact ── */
+
+/* [2832:368] the round pick sits flush against its caption — no gap in Figma.
+   .row's --row-gap has to be zeroed explicitly; mobile puts 20px back. */
+.row--pick{ align-items:flex-end; gap:0; }
+
+.pick{
+    flex:none;
+    width:var(--pick);
+    height:var(--pick);
+    border-radius:1000px;
+    overflow:hidden;
+    position:relative;
+}
+
+.pick img{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+/* [2832:381] the mail button */
+.row--contact{ gap:46px; }
+
+.cta{
+    flex:none;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:var(--cta-w);
+    height:var(--cta-h);
+    border-radius:var(--cta-r);
+    background:#FB4063;
+    color:#fff;
+    text-decoration:none;
+    text-align:center;
+    white-space:nowrap;
+    overflow:hidden;
+    transition:background-color 150ms ease;
+}
+
+.cta:hover{ background:#e0304f; }
+
+.cta__label{
+    display:block;
+    font-weight:700;
+    font-size:var(--cta-fs);
+    --lh:var(--cta-lh);
+}
+
+.contact-note{ flex:none; width:286px; }
+
+.caption.caption--20{
+    /* qualified with .caption so the breakpoint blocks below, which set
+       font-size on .caption itself, do not win on source order */
+    font-size:20px;
+    --lh:27px;
+    max-width:none;
+}
+
+/* [2831:8377] eight circular reference photos */
+.circles{
+    display:flex;
+    gap:var(--circle-gap);
+    align-items:flex-start;
+}
+
+.circle{
+    flex:1 0 0;
+    min-width:0;
+    aspect-ratio:1;
+    position:relative;
+    overflow:hidden;
+    border-radius:100px;
+}
+
+.circle img{
+    position:absolute;
+    max-width:none;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+/* per-circle crops, straight from the Figma fill transforms */
+.circle--1 img{ object-position:bottom; }
+.circle--2 img{ inset:auto; left:-10.76%;  top:-26.42%; width:181.03%; height:241.38%; object-fit:fill; }
+.circle--3 img{ inset:auto; left:-14.66%;  top:-70.11%; width:198.28%; height:264.37%; object-fit:fill; }
+.circle--4 img{ inset:auto; left:-35.18%;  top:-95.30%; width:336.04%; height:448.06%; object-fit:fill; }
+.circle--5 img{ inset:auto; left:-74.92%;  top:-70.50%; width:229.10%; height:305.47%; object-fit:fill; }
+.circle--6 img{ inset:auto; left:-118.10%; top:-174.14%; width:336.21%; height:448.28%; object-fit:fill; }
+.circle--8 img{ inset:auto; left:0;        top:-16.67%; width:176.72%; height:235.63%; object-fit:fill; }
+
+/* [2831:8382] carries a soft corner gradient on top of the photo */
+.circle--5::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius:100px;
+    background:linear-gradient(-40.08deg, rgba(0,0,0,.2) 28.129%, rgba(0,0,0,0) 37.44%);
+}
+
+/* the sketchbook column lets its artwork run past the column edge */
+.col--bleed{ overflow:visible; }
+.col--bleed .gutter{ display:flex; }
+
+/* [figma 2832:283] an empty half-width column that just holds the row open */
+.col--empty{ height:100px; }
+
+/* Col R of the retreat row: caption and book sit on a shared bottom edge */
+.col--book{
+    flex-direction:row;
+    align-items:flex-end;
+    justify-content:flex-end;
+    gap:var(--col-gap);
+}
+
+.col--book .caption{ flex:1 0 0; min-width:0; }
+
+.hero{ display:flex; justify-content:center; }
+
+
+/* ─── 6b. Loading bleed ─────────────────────────────────────────────────────
+   Opaque artwork sits on its own average colour, so a slow connection shows a
+   block in roughly the right tone rather than a white gap that then snaps to a
+   photograph. Only opaque assets get one — anything with alpha has to stay on
+   the paper or the transparency would read as a tinted rectangle.
+   ------------------------------------------------------------------------ */
+
+.media,
+.circle,
+.pick,
+.avatar{ background-color:var(--bleed, transparent); }
+
+.media--render  { --bleed:#C2C9D1; }
+.media--vectary { --bleed:#E8D9D5; }
+.media--unity   { --bleed:#B5D1DC; }
+.media--dune    { --bleed:#D1DAD9; }
+.media--side    { --bleed:#ABDAE0; }
+.media--top     { --bleed:#A0D5DE; }
+.media--plan    { --bleed:#A6C2C5; }
+.media--model174{ --bleed:#D0CFCE; }
+.media--wireframe{--bleed:#56595D; }
+.media--unityui { --bleed:#687679; }
+.pick           { --bleed:#9E8F7C; }
+.avatar         { --bleed:#565656; }
+.circle--1{ --bleed:#7D8374; } .circle--2{ --bleed:#6D9180; }
+.circle--3{ --bleed:#567162; } .circle--4{ --bleed:#9E9485; }
+.circle--5{ --bleed:#8B6C6A; } .circle--6{ --bleed:#7F6F5E; }
+.circle--7{ --bleed:#98948B; } .circle--8{ --bleed:#8D8C86; }
+
+/* The video boxes take their colour from the poster, set inline on the box
+   itself rather than on the <video> — a <video> with nothing loaded has no
+   layout size of its own, so painting only the element leaves most of the
+   frame blank. The element gets it too, for the moment between metadata and
+   first frame. */
+.media--video,
+.vidbox{ background-color:var(--bleed, transparent); }
+
+/* ─── 7. Media ──────────────────────────────────────────────────────────────
+   Both boxes hold their Figma aspect ratio and the artwork fills them at a
+   fixed ratio — never fitted to the column by its own intrinsic size.
+
+   The outline is scaled/offset inside its box exactly as the fill is
+   transformed in Figma (103.92% × 114.6%, offset −1.78% / −5.09%), so the
+   crop is identical at every width.
+   ------------------------------------------------------------------------ */
+
+.media{
+    position:relative;
+    width:100%;
+    overflow:hidden;
+}
+
+.media img{
+    position:absolute;
+    max-width:none;
+}
+
+/* image 170 [figma 2856:3945] */
+.media--outline{ aspect-ratio:744 / 399.3919372558594; }
+
+.media--outline img{
+    width:103.92%;
+    height:114.6%;
+    left:-1.78%;
+    top:-5.09%;
+}
+
+/* image 182 [figma 2856:3947] */
+.media--render{ aspect-ratio:744 / 412; }
+
+/* ratio-boxed artwork — the column sets the width, Figma sets the shape */
+.media--vectors,
+.media--vectary { aspect-ratio:744 / 445; }
+.media--unity   { aspect-ratio:744.0000610351562 / 424.99993896484375; }
+.media--dune    { aspect-ratio:744 / 425; }
+.media--side    { aspect-ratio:1568 / 487.27777099609375; }
+.media--top     { aspect-ratio:1568 / 973.6481323242188; }
+.media--plan    { aspect-ratio:744 / 451.7855224609375; }
+
+.media--render img,
+.media--vectors img,
+.media--vectary img,
+.media--dune img,
+.media--top img,
+.media--plan img{
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+/* fixed-size artwork — exact Figma px per breakpoint, never fitted to the
+   column. Sizes live in the breakpoint blocks as --mw / --mh. */
+.media--hero,
+.media--book,
+.media--masterplan{
+    flex:none;
+    width:var(--mw);
+    height:var(--mh);
+}
+
+.media--hero img{
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.media--masterplan img{
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+/* Treasure_Island, first edition 1 [figma 2832:237] */
+.media--book img{
+    width:101.23%;
+    height:104.6%;
+    left:-1.22%;
+    top:-3.35%;
+}
+
+/* image 17 [figma 2832:260] — the whole node is rotated 180° in Figma, so the
+   rotation has to wrap the cropped composition, not just the bitmap. */
+.media__rot{
+    position:absolute;
+    inset:0;
+    transform:rotate(180deg);
+}
+
+.media--unity img{
+    left:0;
+    top:-1.47%;
+    width:100%;
+    height:101.49%;
+}
+
+/* ── section 2 · 3D Modeling ── */
+.media--video     { aspect-ratio:744 / 424.61993408203125; }
+.media--model174  { aspect-ratio:744 / 428; }
+.media--sky       { aspect-ratio:744 / 558; }
+.media--strip     { aspect-ratio:330.5729064941406 / 720.1588134765625; }
+.media--wireframe { aspect-ratio:1568 / 912; }
+.media--unityui   { aspect-ratio:1568 / 959; }
+
+/* [2831:8130 / 8136 / 8137] Figma lays flat blocks over the corners of these
+   two clips to hide Unity's own toolbar and view gizmo. All are top-anchored
+   with SCALE constraints, so the percentages carry across breakpoints. Each
+   also has a #000 20% fill in the file, but it is switched OFF — the visible
+   paint is the flat colour (or the image) alone. */
+.vmask{
+    position:absolute;
+    top:0;
+    z-index:1;
+    pointer-events:none;
+}
+
+.vmask--gizmo{ left:85.22%; width:14.78%; height:35.33%; background:#F9FEFD; }
+.vmask--tool { left:0;      width:9.41%;  height:35.33%; background:#F7FEFF; }
+
+.vmask--x{
+    left:82.39%;
+    width:17.61%;
+    height:26.38%;
+    max-width:none;
+    object-fit:fill;
+}
+
+.media--video video,
+.vidbox video{ background-color:var(--bleed, transparent); }
+
+.media--video video{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.media--sky img,
+.media--strip img{
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.media--model174 img{ left:0; top:-0.2%;  width:100%; height:100.8%; }
+.media--wireframe img{ left:0; top:-1.46%; width:100%; height:101.5%; }
+.media--unityui img{ left:0; top:-3.55%; width:100%; height:105.69%; }
+
+/* IMG_6549 3 [2832:310] — fixed size, overruns to the left */
+.media--sketch3d{
+    flex:none;
+    width:var(--mw);
+    height:var(--mh);
+}
+.media--sketch3d img{ inset:0; width:100%; height:100%; object-fit:cover; }
+
+/* Side view 1 [figma 2832:272] — a hard crop into a much larger frame */
+.media--side img{
+    width:136.28%;
+    height:265.24%;
+    left:-17.51%;
+    top:-62.82%;
+}
+
+
+/* ─── 8. Type ───────────────────────────────────────────────────────────── */
+
+.lead{
+    font-weight:700;
+    color:var(--black);
+    letter-spacing:0;
+    overflow-wrap:break-word;
+}
+
+/* 3D Modeling [2832:290] — the only Extra Bold on the page. Figma's leading
+   is 0.885 of the size at both breakpoints (200/177 and 68/60.18), so --lh
+   stays a ratio and the cap-height trim keeps working untouched. */
+.display{
+    font-weight:800;
+    color:var(--black);
+    letter-spacing:0;
+    white-space:pre;
+    --lh:0.885em;
+}
+
+/* the 50/56 grey voice — highlighted phrases go solid black */
+.lead--sm{
+    color:var(--grey);
+}
+
+.hi{ color:var(--black); }
+
+/* desktop and tablet break these lines by hand; mobile lets them flow */
+.br-wide{ display:inline; }
+
+.caption{
+    font-weight:700;
+    color:var(--grey);
+    letter-spacing:0;
+    overflow-wrap:break-word;
+}
+
+/* right-aligned caption — the ink meets the RIGHT edge here, so the trim
+   flips: pull the last glyph's bearing off the right and give it back on the
+   left, keeping the measure (and the line breaks) unchanged. */
+.caption--right{
+    text-align:right;
+    margin-right:var(--sbr,0px);
+    margin-left:calc(0px - var(--sbr,0px));
+}
+
+.caption a{
+    font-weight:700;
+    color:var(--black);
+    text-decoration:none;
+    transition:color 150ms ease;
+}
+
+.caption a:hover{ color:var(--link-hover); }   /* ↗ inherits it */
+
+/* ↗ — 0.645em, the ratio Figma uses at both sizes (17→10.965, 14→9.03).
+   Figma does NOT sit it on the baseline: measured off the Figma render, the
+   arrow's ink top lands on the body cap height, ~6px above where a shared
+   baseline would put it. Raise it by the difference:
+       cap 0.712em − arrow yMax (0.669 × 0.645) 0.4315em = 0.2805em of body
+       ÷ 0.645 (the arrow's own em) = 0.435em
+   Constant across breakpoints, since the arrow is always 0.645em.
+   line-height:0 keeps it out of the line-box calculation — inheriting the
+   23px length onto an 11px glyph would centre a 23px leaded box on the
+   smaller font and stretch every line that holds a link. */
+.arw{
+    font-size:.645em;
+    vertical-align:.435em;
+    line-height:0;
+}
+
+/* [2832:313 / 2831:10276] These arrows are NOT the small raised ↗ used in
+   links — measured off Figma's own render, their ink is 12px against a 12.1px
+   cap height, i.e. full size on the baseline. Mobile also points them
+   differently (↑ … ↓) because the row stacks there. */
+.a-narrow{ display:none; }
+
+.emoji--btn{ font-size:.85em; }   /* 17 / 20 [I2832:361;921:1845] */
+
+.emoji{
+    font-family:var(--emoji);
+    font-weight:400;
+    /* Apple Color Emoji's own metrics are taller than the paragraph's, so it
+       drags the first line box down ~1px. Same treatment as .arw — zero its
+       leaded box; the glyph still paints at full size. */
+    line-height:0;
+    /* Apple Color Emoji is a BITMAP face, and the text colour's alpha
+       multiplies into the glyph. --grey is rgba(0,0,0,.55), so every emoji
+       in a caption or lead was compositing at 55% toward the page — measured
+       (127,72,9) opaque vs (185,155,120) grey on the same pixel. An opaque
+       colour restores it; the glyph paints its own colours regardless. */
+    color:var(--black);
+}
+
+
+/* ─── 9. Layout-grid overlay — press G ──────────────────────────────────────
+   A live copy of the Figma Layout Grids. There are two of them in the file,
+   and G shows both.
+
+   RED — the COLUMNS grid on each breakpoint frame, rgb(255,0,0) @ 10%:
+
+       Desktop 1728   offset 86.4  (5%)    4 col   gutter 69.12 (4%)
+       Tablet  1194   offset 53.73 (4.5%)  4 col   gutter 47.76 (4%)
+       Mobile   402   offset 31.5          1 col   —
+
+   GREEN — a separate single-column grid sitting on every ↕ spacer frame,
+   rgb(3,242,156) @ 25%. It marks the vertical rhythm, so it is drawn on the
+   spacers themselves rather than in the fixed overlay — it has to scroll with
+   the content it measures. Offset 0 on desktop/tablet (the spacer is already
+   inside the page padding, so the band runs the full content width) and 31.5
+   on mobile, where the section is full-bleed and the band has to be inset
+   itself — hence the padding + background-clip below.
+
+   Both are built from the very same --margin and --row-gap the layout uses,
+   so they stay true at ANY viewport width, not just the three design widths.
+   If a token is ever wrong, the guides visibly stop lining up with the
+   content, which is the point.
+   ------------------------------------------------------------------------ */
+
+.grid-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    pointer-events:none;
+    padding:0 var(--margin);
+}
+
+.grid-on .grid-overlay{ display:block; }
+
+/* green — vertical rhythm, on the spacers, scrolls with the page */
+.grid-on .spacer{
+    background:rgba(3,242,156,.25);
+    background-clip:content-box;
+}
+
+.grid{
+    display:flex;
+    gap:var(--row-gap);
+    height:100%;
+}
+
+.grid__col{
+    flex:1 0 0;
+    min-width:0;
+    background:rgba(255,0,0,.1);   /* Figma's own grid colour */
+}
+
+.grid__label{
+    position:fixed;
+    right:8px;
+    bottom:8px;
+    padding:4px 8px;
+    border-radius:4px;
+    background:rgba(0,0,0,.75);
+    color:#fff;
+    font-size:10px;
+    line-height:1;
+    font-weight:700;   /* was 500 — the only user of the Medium face, which
+                          meant a 45 KB download for a hidden debug badge */
+    letter-spacing:.02em;
+    white-space:nowrap;
+}
+
+.grid__label::after{ content:var(--grid-label); }
+
+@media print{ .grid-overlay{ display:none; } }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESKTOP — 1440px and up · Figma frame 1728px [2856:3882]
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+    --margin:5%;       /* 86.4 / 1728 — Figma layout-grid offset */
+    --pad:var(--margin);
+    --row-gap:4.4444%; /* 69.12 / 1555.2 — Figma's 4% is of the 1728 frame,
+                          a flex gap % resolves against the 1555.2 row: 4/0.90.
+                          Same number as the layout grid's gutter. */
+    --col-gap:40px;
+    --spacer:100px;
+    --spacer-md:80px;
+    --spacer-xl:150px;
+    --grid-label:"Desktop · 1440+ · 4 col";
+
+    /* opening-glyph bearings for the one-off captions (lsb/1000 × 17px) */
+    --sb-V:-0.10px;   /* Vectors in Figma      V 6  */
+    --sb-3:-0.65px;   /* 3D extrusion          3 38 */
+    --sb-U:-0.82px;   /* Unity.                U 48 */
+    --sb-S:-0.41px;   /* See little people     S 24 */
+    --sb-A:-0.10px;   /* Amazingly, Figma's    A 6  */
+    --sb-I:-0.99px;   /* I'm just getting…     I 58 */
+    --sb-T:-0.27px;   /* That's how you sky…   T 16 */
+    --pair-gap:9.3023%;  /* 69.12 / 743.04 */
+    --circle-gap:40px;
+    --sb-W:-0.30px;   /* We're almost done…    W 6  */
+    --sb-H:-0.99px;   /* Have I emphasized…    H 58 */
+    --sb-I20:-1.16px; /* I currently run…      I 58 x 20px */
+    --pick:250px;
+    --avatar:150px;
+    --hero-h:1001px;
+    --skip-pt:80px;
+    --pill-py:19.5px;
+    --pill-fs:20px;
+    --pill-lh:27px;
+    --page-max:1966.667px;   /* 1770 / 0.9 */
+    --rule-h:2px;
+    --topbar-fs:20px;
+    --topbar-lh:56px;
+    --topbar-sbl:-1.08px;   /* 'D' lsb 54 x 20px */
+    --topbar-sbr:-0.92px;   /* 'l' rsb 46 x 20px */
+    --cta-w:412px;
+    --cta-h:82px;
+    --cta-r:20.5px;
+    --cta-fs:24px;
+    --cta-lh:32px;
+}
+
+.lead{
+    font-size:75px;
+    --lh:76px;
+    max-width:1770px;
+    --sbl:-4.35px;     /* N/I lsb 58 × 75px */
+    --sbr:-2.40px;     /* lowercase rsb 32 × 75px */
+}
+
+.caption{
+    font-size:17px;
+    --lh:23px;
+    max-width:650px;
+    --sbl:-0.10px;     /* V lsb  6 × 17px */
+    --sbr:-0.65px;     /* .  rsb 38 × 17px */
+}
+
+.lead--sm{
+    font-size:50px;
+    --lh:56px;
+    max-width:1150px;
+    --sbl:-2.90px;     /* H/I lsb 58 × 50px */
+    --sbr:-1.60px;     /* lowercase rsb 32 × 50px */
+}
+
+.display{
+    font-size:200px;
+    --sbl:-6.80px;     /* '3' lsb 34 (ExtraBold) × 200px */
+    --sbr:-9.00px;     /* 'g' rsb 45 × 200px */
+}
+
+.media--hero      { --mw:1428.245px; --mh:1026.465px; }  /* [2832:230] */
+.media--sketch3d  { --mw:1318.297px; --mh:934.611px;  }  /* [2832:310] */
+.media--book      { --mw:164px;      --mh:239px;      }  /* [2832:237] */
+.media--masterplan{ --mw:1318.297px; --mh:934.611px;  }  /* [2832:269] */
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TABLET — 834px to 1439px · Figma frame 1194px [2856:4092]
+   Type stays 75/76 — the measure narrows, so the lead runs 5 lines not 4.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media screen and (max-width:1439px){
+
+    :root{
+        --margin:4.5%; /* 53.73 / 1194 */
+        --row-gap:4.3956%; /* 47.76 / 1086.54 — as above: 4/0.91 */
+        --col-gap:40px;
+        --spacer:80px;
+        --spacer-md:65px;
+        --spacer-xl:120px;
+        --pair-gap:9.1974%;  /* 47.76 / 519.39 */
+        --circle-gap:20px;
+        --pick:200px;
+        --avatar:120px;
+        --hero-h:835px;
+        --grid-label:"Tablet · 834–1439 · 4 col";
+    }
+
+    /* two rows give up and stack here [2831:9311, 2831:9344].
+       The gap has to move off `gap` and onto a margin: once the row is a
+       COLUMN, `gap` is a row-gap, and a percentage row-gap resolves against
+       the container's block size — which is auto here, so it computes to 0.
+       A percentage margin-top resolves against the containing block's WIDTH,
+       which is exactly the 4% of the frame Figma is asking for. */
+    .row--stack-tablet{
+        flex-direction:column;
+        gap:0;
+        /* .row aligns to flex-start, which in column direction shrinks each
+           column to its content width — the book's percentage then resolved
+           against 690px instead of the full measure. */
+        align-items:stretch;
+    }
+
+    .row--stack-tablet > * + *{ margin-top:var(--row-gap); }
+
+    .media--hero      { --mw:1086.54px; --mh:781px;  }
+    .media--masterplan{ --mw:1630px;    --mh:1155px; }
+    .media--sketch3d  { --mw:921px;     --mh:653px;   }
+
+    /* [2831:9375] Figma changed this: the video row's right column HUGs here
+       rather than holding the desktop 424.62 height, so the row is driven by
+       the captioned column on the left (348.43, was 425). */
+    .row--video > .col:last-child{ height:auto; }
+
+    /* [2831:9316] the book scales with the tablet width instead of locking at
+       164px — 164/1086.54 = 15.0938%, so it is still exactly 164x239 at the
+       1194 design width and grows or shrinks either side of it. */
+    .media--book{
+        width:15.0938%;
+        height:auto;
+        aspect-ratio:164 / 239;
+    }
+
+    /* [2831:9260] the hero re-proportions: title steps to 150 and both image
+       layers pin to the bottom instead of centring */
+    /* The title must be free to re-wrap here. Its box is pinned to the page
+       margin on BOTH sides at this breakpoint (3.85% each), so below ~1194px
+       "Private Island," no longer fits on one line — held to two lines by the
+       hard <br> it overran the right edge by up to 250px and was clipped.
+       Letting it flow gives three lines, which is what the narrower measure
+       asks for. It is absolutely positioned, so the line count never moves the
+       artwork around it. Scoped to --hero so the 3D Modeling display keeps
+       its hard break. */
+    .display--hero{ font-size:150px; left:3.85%; right:3.85%; top:194px;
+                    --sbl:-5.10px; --sbr:-6.75px; }
+    .hero-layer--bottom{ top:auto; bottom:23.28px; transform:none; }
+    .hero-layer--top{ top:auto; bottom:-0.23px; transform:none; }
+    .hero-vr{ left:calc(3.85% + 468.531px); top:81px; }   /* 546.5 - 3.85%x1194, less 32 */
+
+    /* [2831:9295] the intro row stacks — gap moves to a margin for the same
+       reason as the other stacked rows (percentage row-gap resolves to 0) */
+    .row--intro{
+        flex-direction:column;
+        align-items:stretch;
+        gap:0;
+    }
+
+    .row--intro > * + *{ margin-top:var(--row-gap); }
+
+    /* [2831:9304] tablet opens a gap between the hero and the intro */
+    .spacer--hero-intro{ height:var(--spacer); }
+
+    /* [2831:9430] the copy runs the full measure here — no empty half */
+    .col--flat{ display:none; }
+
+    /* [2831:9369] the display and its copy stack here. Same trap as
+       .row--stack-tablet: a percentage gap becomes a row-gap once the
+       direction is column, and resolves to 0 against an auto height. */
+    .row--wrap{
+        flex-direction:column;
+        gap:0;
+    }
+
+    /* [2831:9369] Figma gives this stack a static 47.76 gap — not the 4% the
+       other rows use, so it must not scale with the viewport. */
+    .row--wrap > * + *{ margin-top:47.76px; }
+
+    .display{
+        font-size:150px;
+        --sbl:-5.10px;   /* '3' lsb 34 × 150px */
+        --sbr:-6.75px;   /* 'g' rsb 45 × 150px */
+    }
+
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE — 833px and below · Figma frame 402px [2856:3645]
+   Row stacks. The margin moves off the section and onto .gutter so the
+   render alone can run full-bleed.
+
+   The margin is a percentage like the other two breakpoints (31.5/402), so
+   it tracks the viewport instead of pinning to the 402px design width:
+   25.1px at 320w, 31.5px at the 402 design width, 65.3px at 833w. Every
+   .gutter is either a direct child of .section or sits inside a full-width
+   .col, so the percentage always resolves against the viewport width.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media screen and (max-width:833px){
+
+    :root{
+        --margin:7.835821%;  /* 31.5 / 402 — same % basis as the other two */
+        --pad:0;           /* the margin moves onto .gutter instead */
+        --row-gap:40px;
+        --col-gap:20px;
+        --spacer:50px;
+        --spacer-md:40px;
+        --spacer-xl:60px;
+        --grid-label:"Mobile · ≤833 · 1 col";
+
+        --sb-V:-0.08px;
+        --sb-3:-0.53px;
+        --sb-U:-0.67px;
+        --sb-S:-0.34px;
+        --sb-A:-0.08px;
+        --sb-I:-0.81px;
+        --sb-T:-0.22px;
+        --circle-gap:20px;
+        --sb-W:-0.16px;
+        --sb-H:-0.81px;
+        --sb-I20:-0.93px;
+        --pick:100px;
+        --cta-w:100%;
+        --cta-h:70px;
+        --cta-r:15px;
+        --cta-fs:20px;
+        --cta-lh:27px;
+        --avatar:80px;
+        --hero-h:417px;
+        --skip-pt:0px;
+        --pill-py:16px;
+        --pill-fs:16px;
+        --pill-lh:22px;
+        --rule-h:1.5px;
+        --topbar-fs:16px;
+        --topbar-lh:45px;
+        --topbar-sbl:-0.86px;
+        --topbar-sbr:-0.74px;
+    }
+
+    .gutter{ padding:0 var(--margin); }
+
+    /* Figma's mobile grid is a single stretched column, so drop the other three */
+    .grid__col:nth-child(n+2){ display:none; }
+
+    /* the spacer runs full-bleed here, so inset the green band itself
+       (Figma gives the mobile ↕ grid an offset of 31.5, not 0) */
+    .grid-on .spacer{ padding:0 var(--margin); }
+
+    .row{ flex-direction:column; }
+
+    /* The tablet block above is max-width:1439, so it reaches here too. Undo
+       its margin-based gap: --row-gap is a LENGTH at this breakpoint, so a
+       plain column `gap` works and the margin would double-count. */
+    .row--stack-tablet,
+    .row--wrap{ gap:var(--row-gap); }
+    .row--stack-tablet > * + *,
+    .row--wrap > * + *,
+    .row--intro > * + *{ margin-top:0; }
+
+    /* Same reach-through: the tablet block stretches the stacked columns to
+       the full measure so the book's percentage resolves against it. Mobile
+       keeps .row's flex-start — the columns size to their content here. */
+    .row--stack-tablet{ align-items:flex-start; }
+
+    /* ...and the book goes back to the fixed --mw/--mh pair below. */
+    .media--book{
+        width:var(--mw);
+        height:var(--mh);
+        aspect-ratio:auto;
+    }
+
+    /* [2831:10142] Figma note: "Section h1 min height: 0.8 of window width" */
+    .hero-canvas{ height:max(var(--hero-h), 80vw); }
+
+    /* Figma has right:-4.98% here too; mirroring the left inset keeps the
+       title off the edge across the whole 320–833 range (at 320 the negative
+       box clipped it, at 833 it collapsed onto one line hard against the
+       right edge). Still three lines at the 402 design width. */
+    .display--hero{ font-size:68px; left:6.97%; right:6.97%; top:112px;
+                    --sbl:-2.31px; --sbr:-3.06px; }
+    .hero-layer--bottom{ top:auto; bottom:28.6px; left:1.99%; right:2.69%; transform:none; }
+    .hero-layer--top{ top:auto; bottom:0.38px; left:28.11%; right:2.65%; transform:none; }
+    .hero-vr{ left:calc(6.97% + 216.981px); top:61px;      /* 245 - 6.97%x402 */
+              width:55px; height:80px; }
+
+    /* [2850:1474] the avatar row keeps its 20px gap; the copy stacks above */
+    .row--intro{ gap:28px; }
+    .col--avatar{ gap:20px; }
+
+    .spacer--haiku{ height:28px; }
+
+    /* [2856:2981] mobile also separates the intro from the skip button */
+    .spacer--intro-skip{ height:var(--spacer-md); }
+
+    /* No inset override below 402: the left margin holds at 6.97% all the way
+       down, so the title never shifts sideways. There used to be a rule easing
+       both insets here, but with the left one pinned the right makes no
+       difference at all — "Perhaps?" is 299.8px of unbreakable ink, so it sets
+       its own line whatever the measure. Verified identical at 320/360/375/
+       390/401 with the right inset at -2.5%, 0% and 6.97%: same three lines,
+       same ink edge. Below ~322px viewport that word does overrun the right
+       edge (2.05px at 320) — unavoidable without moving the left margin or
+       scaling the type. */
+
+    /* [2850:1503] the CTA and its note stack, 20 apart; the pick keeps its
+       20px gap from the caption and stays a row */
+    .row--contact{ gap:20px; }
+    .contact-note{ width:100%; }
+
+    .row--pick{
+        flex-direction:row;
+        gap:20px;
+        align-items:flex-end;
+    }
+
+    .caption.caption--20{ font-size:16px; --lh:22px; }
+
+    /* [2850:1499] the closing note tightens its top padding */
+    .wrap--pt40{ padding-top:20px; }
+
+    /* [2831:10194] the retreat row packs tighter than the others */
+    .row--tight{ gap:28px; }
+
+    /* [2831:10270] and this one closes to 20 */
+    .row--sketch{ gap:var(--col-gap); }
+
+    .col{ width:100%; }
+
+    /* the empty half-column has nothing to hold open once the row stacks */
+    .col--empty{ display:none; }
+
+    /* the hero sits at the gutter and runs off the right edge [2848:2031] */
+    .hero{ justify-content:flex-start; }
+
+    /* [2848:2031] The three sketchbook spreads are 678px wide inside a 402px
+       frame. Figma runs them off the edge, but .section's overflow-x:clip
+       then makes the rest of the drawing unreachable — so the wrapper
+       scrolls instead. Scrollbars are hidden: the cropped photo is its own
+       affordance, and a visible bar would sit on the artwork. */
+    .scroll-x{
+        overflow-x:auto;
+        overflow-y:hidden;      /* `auto` on one axis forces the other off
+                                   `visible`; nothing overflows vertically
+                                   here, so name it rather than inherit it */
+        overscroll-behavior-x:contain;   /* don't chain to the page */
+        -webkit-overflow-scrolling:touch;
+        scrollbar-width:none;            /* Firefox */
+        -ms-overflow-style:none;         /* legacy Edge */
+    }
+    .scroll-x::-webkit-scrollbar{ display:none; }   /* Safari + Chrome */
+
+    /* Sketch-to-3D bleeds off the LEFT, so its scroller has to open at the
+       far end. `direction:rtl` puts the flex start on the right and makes
+       scrollLeft begin there — no script. The figure flips back to ltr so
+       nothing inside it is affected. */
+    .col--bleed-left{ align-items:stretch; }
+    .col--bleed-left .scroll-x--end{
+        direction:rtl;
+        justify-content:flex-start;   /* must out-specify .col--bleed-left
+                                         .gutter's flex-end, or the figure
+                                         lands on the unreachable side */
+    }
+    .scroll-x--end > *{ direction:ltr; }
+
+    /* hard line breaks are desktop/tablet only — mobile lets the copy flow */
+    .br-wide{ display:none; }
+
+    .a-wide{ display:none; }
+    .a-narrow{ display:inline; }
+
+    .lead{
+        font-size:40px;
+        --lh:41px;
+        max-width:none;
+        --sbl:-2.32px;   /* N/I lsb 58 × 40px */
+        --sbr:-1.28px;   /* lowercase rsb 32 × 40px */
+    }
+
+    .caption{
+        font-size:14px;
+        --lh:19px;
+        max-width:none;
+        --sbl:-0.08px;   /* V lsb  6 × 14px */
+        --sbr:-0.53px;   /* .  rsb 38 × 14px */
+    }
+
+    .lead--sm{
+        font-size:27px;
+        --lh:30px;
+        max-width:none;
+        --sbl:-1.57px;   /* H/I lsb 58 × 27px */
+        --sbr:-0.86px;   /* lowercase rsb 32 × 27px */
+    }
+
+    .display{
+        font-size:68px;
+        --sbl:-2.31px;   /* '3' lsb 34 × 68px */
+        --sbr:-3.06px;   /* 'g' rsb 45 × 68px */
+    }
+
+    .media--hero      { --mw:678px;    --mh:487.916px; }
+    .media--sketch3d  { --mw:678px;    --mh:480px;     }
+
+    /* [2831:10254] the copy column packs to 32px here, not 40 */
+    .col--minw{ min-width:0; }
+    .col--gap40{ gap:32px; }
+
+    /* [2831:10?] the caption/strip pair stacks, and the split caption reflows
+       into one run of text instead of two spaced paragraphs */
+    .col--pair{ flex-direction:column; align-items:stretch; gap:var(--col-gap); }
+
+    .caption--split p{ display:inline; margin:0; }
+    .caption--split p:first-child::after{ content:" "; }
+
+    .display{ white-space:normal; }
+
+    /* [2831:10270] the column is content-height here, and the "Sketch to 3D"
+       caption moves ABOVE its image with a 40px gap */
+    .col--h500{ height:auto; }
+    .row--video > .col:last-child{ height:auto; }
+
+    .stack--sketch{
+        flex-direction:column-reverse;
+        gap:var(--spacer-md);
+    }
+
+    /* [2831:10305] the sky block carries no caption at all on mobile */
+    .caption--overlay{ display:none; }
+
+    /* [2831:10283] the texture strip becomes a fixed 200×435, centred, with
+       the caption below it */
+    .col--pair{ flex-direction:column; align-items:center; gap:var(--col-gap); }
+    .col--pair > *{ flex:none; width:100%; }
+    .col--pair > .media--strip{ width:200px; height:435px; }
+    .media--book      { --mw:96.067px; --mh:140px;     }
+    .media--masterplan{ --mw:678px;    --mh:481px;     }
+
+}
